@@ -32,7 +32,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <signal.h>
-
+#include <sstream>
 
 // libstage
 #include <stage.hh>
@@ -50,6 +50,8 @@
 #include <geometry_msgs/Twist.h>
 #include <rosgraph_msgs/Clock.h>
 
+
+#include <std_msgs/Int32.h>
 #include <std_srvs/Empty.h>
 
 #include "tf/transform_broadcaster.h"
@@ -140,6 +142,10 @@ private:
     ros::Time base_last_globalpos_time;
     // Last published global pose of each robot
     std::vector<Stg::Pose> base_last_globalpos;
+    //Customizing stage_ros
+    ros::Publisher collision_counter_;
+    
+    int count_collision = 0;
 
 public:
     // Constructor; stage itself needs argc/argv.  fname is the .world file
@@ -311,6 +317,7 @@ StageNode::StageNode(int argc, char** argv, bool gui, const char* fname, bool us
 
     // inspect every model to locate the things we care about
     this->world->ForEachDescendant((Stg::model_callback_t)ghfunc, this);
+    this->collision_counter_ = this->n_.advertise<std_msgs::Int32>("collisions", 10);
 }
 
 
@@ -521,6 +528,16 @@ StageNode::WorldCallback()
         //@todo Publish stall on a separate topic when one becomes available
         //this->odomMsgs[r].stall = this->positionmodels[r]->Stall();
         //
+        
+	    if(this->positionmodels[r]->Stalled()){
+		    this->positionmodels[r]->SetPose(this->initial_poses[r]);
+    	    this->positionmodels[r]->SetStall(false);
+		    this->count_collision += 1;   
+	    }
+       
+        std_msgs::Int32 msg_collision;
+        msg_collision.data = this->count_collision;
+        this->collision_counter_.publish(msg_collision);
         odom_msg.header.frame_id = mapName("odom", r, static_cast<Stg::Model*>(robotmodel->positionmodel));
         odom_msg.header.stamp = sim_time;
 
